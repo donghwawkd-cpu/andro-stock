@@ -170,8 +170,13 @@ else:
 
         my_id = st.session_state.user_id
         my_data = global_state["users"][my_id]
+        
+        # 총 자산 및 수익률 계산
         total_stock_value = sum(my_data["portfolio"][s] * current_prices[s] for s in all_assets)
         total_assets = my_data["cash"] + total_stock_value
+        initial_cash = 10000000 # 시드머니 1천만 원
+        total_profit = total_assets - initial_cash
+        roi_pct = (total_profit / initial_cash) * 100
 
         if is_game_over:
             st.title("🏁 게임 종료!")
@@ -179,17 +184,27 @@ else:
             st.balloons()
         else:
             st.title(f"📈 {current_year}년 주식시장")
+            
+            # ⭐ 총자산/수익률 한국 주식 스타일(오르면 빨강, 내리면 초록) 적용
             m1, m2, m3 = st.columns(3)
-            m1.metric("총 자산", f"{total_assets:,}원")
-            m2.metric("현금 잔고", f"{my_data['cash']:,}원")
-            m3.metric("수익률", f"{(total_assets-10000000)/100000:+.2f}%")
+            m1.metric("내 총 자산", f"{total_assets:,}원", delta=f"{total_profit:,}원", delta_color="inverse")
+            m2.metric("보유 현금", f"{my_data['cash']:,}원")
+            m3.metric("누적 수익률", f"{roi_pct:+.2f}%", delta=f"{roi_pct:+.2f}%p", delta_color="inverse")
             
             st.divider()
 
-            # ⭐ 코인 거래
+            # ⭐ 코인 거래 (퍼센트 추가 & 한국 주식 스타일 적용)
             with st.container(border=True):
                 coin_diff = current_prices[special_coin] - prev_prices[special_coin]
-                st.metric(label="🪙 안드로 코인", value=f"{current_prices[special_coin]:,}원", delta=f"{coin_diff:,}원")
+                coin_pct = (coin_diff / prev_prices[special_coin] * 100) if prev_prices[special_coin] != 0 else 0
+                
+                st.metric(
+                    label="🪙 안드로 코인", 
+                    value=f"{current_prices[special_coin]:,}원", 
+                    delta=f"{coin_diff:,}원 ({coin_pct:+.2f}%)", 
+                    delta_color="inverse"
+                )
+                
                 owned_coin = my_data["portfolio"][special_coin]
                 st.caption(f"내 보유량: **{owned_coin}개**")
                 
@@ -198,7 +213,6 @@ else:
                     b_amt = st.number_input("매수 수량", min_value=0, step=1, key="b_coin")
                     st.caption(f"예상: -{b_amt * current_prices[special_coin]:,}원")
                     
-                    # 일반 매수 / MAX 매수 버튼 분리
                     b_col1, b_col2 = st.columns(2)
                     if b_col1.button("매수", key="btn_b_coin", use_container_width=True):
                         if b_amt > 0 and b_amt * current_prices[special_coin] <= my_data["cash"]:
@@ -209,7 +223,7 @@ else:
                             st.error("현금 부족!")
                     
                     if b_col2.button("MAX", key="btn_max_b_coin", type="primary", use_container_width=True):
-                        max_qty = my_data["cash"] // current_prices[special_coin] # 살 수 있는 최대 수량 계산
+                        max_qty = my_data["cash"] // current_prices[special_coin]
                         if max_qty > 0:
                             global_state["users"][my_id]["cash"] -= max_qty * current_prices[special_coin]
                             global_state["users"][my_id]["portfolio"][special_coin] += max_qty
@@ -221,7 +235,6 @@ else:
                     s_amt = st.number_input("매도 수량", min_value=0, step=1, key="s_coin")
                     st.caption(f"예상: +{s_amt * current_prices[special_coin]:,}원")
                     
-                    # 일반 매도 / MAX 매도 버튼 분리
                     s_col1, s_col2 = st.columns(2)
                     if s_col1.button("매도", key="btn_s_coin", use_container_width=True):
                         if s_amt > 0 and s_amt <= owned_coin:
@@ -234,19 +247,27 @@ else:
                     if s_col2.button("MAX", key="btn_max_s_coin", type="primary", use_container_width=True):
                         if owned_coin > 0:
                             global_state["users"][my_id]["cash"] += owned_coin * current_prices[special_coin]
-                            global_state["users"][my_id]["portfolio"][special_coin] = 0 # 전량 매도
+                            global_state["users"][my_id]["portfolio"][special_coin] = 0
                             st.rerun()
                         else:
                             st.error("보유량 없음!")
 
-            # ⭐ 12궁도 주식 거래
+            # ⭐ 12궁도 주식 거래 (퍼센트 추가 & 한국 주식 스타일 적용)
             st.markdown("### 🛒 12궁도 거래소")
             display_cols = st.columns(2)
             for i, stock in enumerate(constellations):
                 with display_cols[i % 2]:
                     with st.container(border=True):
                         stock_diff = current_prices[stock] - prev_prices[stock]
-                        st.metric(label=f"🌌 {stock}", value=f"{current_prices[stock]:,}원", delta=f"{stock_diff:,}원")
+                        stock_pct = (stock_diff / prev_prices[stock] * 100) if prev_prices[stock] != 0 else 0
+                        
+                        st.metric(
+                            label=f"🌌 {stock}", 
+                            value=f"{current_prices[stock]:,}원", 
+                            delta=f"{stock_diff:,}원 ({stock_pct:+.2f}%)", 
+                            delta_color="inverse"
+                        )
+                        
                         owned = my_data["portfolio"][stock]
                         st.caption(f"내 보유량: **{owned}주**")
                         
