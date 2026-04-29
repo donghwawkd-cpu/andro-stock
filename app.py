@@ -40,7 +40,7 @@ h1, h2, h3 {
     font-weight: 800 !important;
 }
 
-/* 버튼 모서리 둥글게 */
+/* 버튼 모서리 둥글게 및 호버 효과 */
 .stButton > button {
     border-radius: 8px !important;
     font-weight: 600 !important;
@@ -60,14 +60,10 @@ constellations = [
 special_coin = '안드로 코인'
 all_assets = constellations + [special_coin]
 
-# ⭐ 시대별 12궁도 고정 주가 데이터베이스
+# ⭐ 시대별 12궁도 고정 주가 데이터베이스 (필요한 연도 데이터 유지)
 yearly_prices = {
     1997: {'양자리': 800, '황소자리': 500, '쌍둥이자리': 300, '게자리': 400, '사자자리': 1200, '처녀자리': 600, '천칭자리': 100, '전갈자리': 150, '사수자리': 200, '염소자리': 100, '물병자리': 500, '물고기자리': 200},
-    1998: {'양자리': 500, '황소자리': 300, '쌍둥이자리': 200, '게자리': 250, '사자자리': 800, '처녀자리': 400, '천칭자리': 150, '전갈자리': 200, '사수자리': 250, '염소자리': 150, '물병자리': 800, '물고기자리': 300},
     1999: {'양자리': 2500, '황소자리': 1800, '쌍둥이자리': 500, '게자리': 600, '사자자리': 1500, '처녀자리': 800, '천칭자리': 300, '전갈자리': 500, '사수자리': 400, '염소자리': 200, '물병자리': 5000, '물고기자리': 800},
-    2003: {'양자리': 4000, '황소자리': 2500, '쌍둥이자리': 800, '게자리': 900, '사자자리': 2200, '처녀자리': 1200, '천칭자리': 800, '전갈자리': 1200, '사수자리': 1000, '염소자리': 500, '물병자리': 2000, '물고기자리': 1500},
-    2004: {'양자리': 5500, '황소자리': 3500, '쌍둥이자리': 1200, '게자리': 1500, '사자자리': 3000, '처녀자리': 1800, '천칭자리': 1500, '전갈자리': 2500, '사수자리': 1800, '염소자리': 800, '물병자리': 3500, '물고기자리': 2200},
-    2005: {'양자리': 7000, '황소자리': 4500, '쌍둥이자리': 1800, '게자리': 2000, '사자자리': 4500, '처녀자리': 2500, '천칭자리': 2500, '전갈자리': 4000, '사수자리': 3000, '염소자리': 1500, '물병자리': 6000, '물고기자리': 4000},
     2024: {'양자리': 75000, '황소자리': 150000, '쌍둥이자리': 180000, '게자리': 55000, '사자자리': 200000, '처녀자리': 110000, '천칭자리': 85000, '전갈자리': 180000, '사수자리': 400000, '염소자리': 150000, '물병자리': 180000, '물고기자리': 200000},
     2025: {'양자리': 85000, '황소자리': 180000, '쌍둥이자리': 250000, '게자리': 60000, '사자자리': 220000, '처녀자리': 130000, '천칭자리': 90000, '전갈자리': 200000, '사수자리': 350000, '염소자리': 120000, '물병자리': 190000, '물고기자리': 250000},
     2026: {'양자리': 95000, '황소자리': 220000, '쌍둥이자리': 300000, '게자리': 70000, '사자자리': 250000, '처녀자리': 150000, '천칭자리': 100000, '전갈자리': 230000, '사수자리': 450000, '염소자리': 200000, '물병자리': 220000, '물고기자리': 300000}
@@ -76,7 +72,8 @@ yearly_prices = {
 # 2. 서버 공용 메모리 설정
 @st.cache_resource
 def get_global_state():
-    fixed_sequence = [2024, 2025, 2003, 2004, 2005, 1997, 1998, 1999, 2026]
+    # ⭐ 총 4번의 시간여행 (5개 연도) 하드코딩
+    fixed_sequence = [2024, 1997, 1999, 2025, 2026]
     first_year = fixed_sequence[0]
     init_prices = yearly_prices[first_year].copy()
     init_prices[special_coin] = 1000 
@@ -98,7 +95,7 @@ if 'logged_in' not in st.session_state:
 
 if not st.session_state.logged_in:
     st.title("🌌 안드로 주식게임")
-    st.info("9번의 시간 여행! 시드머니 1,000만 원으로 시작합니다.")
+    st.info("4번의 시공간 이동! 시드머니 1,000만 원으로 시작합니다.")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -245,16 +242,40 @@ else:
             
             st.divider()
 
-            # 거래 입력창용 공통 함수 (50%, MAX 로직 포함)
+            # ⭐ 거래 입력창용 공통 함수 (콜백 로직 적용 완료)
             def render_trading_ui(asset_name, current_price, owned_qty):
-                # 자산별 고유 key
                 b_key = f"buy_amt_{asset_name}"
                 s_key = f"sell_amt_{asset_name}"
                 
                 max_buyable = my_data["cash"] // current_price
                 max_sellable = owned_qty
 
-                # 메트릭 표시 (상단)
+                # --- 🛠️ 콜백(Callback) 함수 정의 ---
+                # 1. 50% / MAX 수량 자동 입력 콜백
+                def set_amt(key, val):
+                    st.session_state[key] = val
+
+                # 2. 매수/매도 실행 콜백 (화면 렌더링 전 즉시 처리)
+                def execute_trade(action, key, price):
+                    amt = st.session_state.get(key, 0)
+                    current_owned = global_state["users"][my_id]["portfolio"][asset_name]
+                    
+                    if action == "buy":
+                        if amt > 0 and amt * price <= global_state["users"][my_id]["cash"]:
+                            global_state["users"][my_id]["cash"] -= amt * price
+                            global_state["users"][my_id]["portfolio"][asset_name] += amt
+                            st.session_state[key] = 0 # 거래 성공 시 입력창 0으로 초기화
+                        else:
+                            st.toast("⚠️ 현금이 부족하거나 수량을 확인하세요!", icon="🚨")
+                    elif action == "sell":
+                        if amt > 0 and amt <= current_owned:
+                            global_state["users"][my_id]["cash"] += amt * price
+                            global_state["users"][my_id]["portfolio"][asset_name] -= amt
+                            st.session_state[key] = 0 # 거래 성공 시 입력창 0으로 초기화
+                        else:
+                            st.toast("⚠️ 보유량이 부족하거나 수량을 확인하세요!", icon="🚨")
+
+                # --- 메트릭 표시 (상단) ---
                 asset_diff = current_price - prev_prices[asset_name]
                 asset_pct = (asset_diff / prev_prices[asset_name] * 100) if prev_prices[asset_name] != 0 else 0
                 
@@ -271,60 +292,35 @@ else:
                 
                 st.markdown("<hr style='margin: 5px 0px 15px 0px; border-color: #374151;'>", unsafe_allow_html=True)
 
-                # 매수 / 매도 영역
                 trade_c1, trade_c2 = st.columns(2)
                 
-                # --- 매수(Buy) 구역 ---
+                # --- 🔴 매수(Buy) 구역 ---
                 with trade_c1:
                     st.markdown(f"<span style='color: #ef4444; font-weight: bold;'>매수</span> (최대 {max_buyable:,}주)", unsafe_allow_html=True)
-                    # 수량 입력창
+                    
                     buy_amt = st.number_input("수량", min_value=0, step=1, key=b_key, label_visibility="collapsed")
                     
                     btn_c1, btn_c2, btn_c3 = st.columns([1, 1, 2])
-                    if btn_c1.button("50%", key=f"b_50_{asset_name}"):
-                        st.session_state[b_key] = max_buyable // 2
-                        st.rerun()
-                    if btn_c2.button("MAX", key=f"b_max_{asset_name}"):
-                        st.session_state[b_key] = max_buyable
-                        st.rerun()
-                        
-                    if btn_c3.button("🔴 매수 실행", key=f"b_exec_{asset_name}", type="primary", use_container_width=True):
-                        if buy_amt > 0 and buy_amt * current_price <= my_data["cash"]:
-                            global_state["users"][my_id]["cash"] -= buy_amt * current_price
-                            global_state["users"][my_id]["portfolio"][asset_name] += buy_amt
-                            st.session_state[b_key] = 0 # 거래 후 수량 초기화
-                            st.rerun()
-                        elif buy_amt == 0:
-                            st.warning("수량을 입력하세요.")
-                        else:
-                            st.error("현금이 부족합니다!")
-                            
+                    btn_c1.button("50%", key=f"b_50_{asset_name}", on_click=set_amt, args=(b_key, max_buyable // 2))
+                    btn_c2.button("MAX", key=f"b_max_{asset_name}", on_click=set_amt, args=(b_key, max_buyable))
+                    
+                    # 실행 버튼 클릭 시 콜백 함수 즉시 호출
+                    btn_c3.button("🔴 매수 실행", key=f"b_exec_{asset_name}", type="primary", use_container_width=True, on_click=execute_trade, args=("buy", b_key, current_price))
+                    
                     st.caption(f"예상 비용: -{buy_amt * current_price:,}원")
 
-                # --- 매도(Sell) 구역 ---
+                # --- 🔵 매도(Sell) 구역 ---
                 with trade_c2:
                     st.markdown(f"<span style='color: #3b82f6; font-weight: bold;'>매도</span> (보유 {max_sellable:,}주)", unsafe_allow_html=True)
-                    # 수량 입력창
+                    
                     sell_amt = st.number_input("수량", min_value=0, step=1, key=s_key, label_visibility="collapsed")
                     
                     btn_c1, btn_c2, btn_c3 = st.columns([1, 1, 2])
-                    if btn_c1.button("50%", key=f"s_50_{asset_name}"):
-                        st.session_state[s_key] = max_sellable // 2
-                        st.rerun()
-                    if btn_c2.button("MAX", key=f"s_max_{asset_name}"):
-                        st.session_state[s_key] = max_sellable
-                        st.rerun()
-                        
-                    if btn_c3.button("🔵 매도 실행", key=f"s_exec_{asset_name}", use_container_width=True):
-                        if sell_amt > 0 and sell_amt <= max_sellable:
-                            global_state["users"][my_id]["cash"] += sell_amt * current_price
-                            global_state["users"][my_id]["portfolio"][asset_name] -= sell_amt
-                            st.session_state[s_key] = 0 # 거래 후 수량 초기화
-                            st.rerun()
-                        elif sell_amt == 0:
-                            st.warning("수량을 입력하세요.")
-                        else:
-                            st.error("보유 수량이 부족합니다!")
+                    btn_c1.button("50%", key=f"s_50_{asset_name}", on_click=set_amt, args=(s_key, max_sellable // 2))
+                    btn_c2.button("MAX", key=f"s_max_{asset_name}", on_click=set_amt, args=(s_key, max_sellable))
+                    
+                    # 실행 버튼 클릭 시 콜백 함수 즉시 호출
+                    btn_c3.button("🔵 매도 실행", key=f"s_exec_{asset_name}", use_container_width=True, on_click=execute_trade, args=("sell", s_key, current_price))
                             
                     st.caption(f"예상 수익: +{sell_amt * current_price:,}원")
 
