@@ -1,9 +1,56 @@
+# 모의주식 게임 만들기
 import streamlit as st
 import pandas as pd
 from streamlit_autorefresh import st_autorefresh
 
-# 1. 사이트 기본 설정
-st.set_page_config(page_title="안드로 주식게임", layout="wide")
+# 1. 사이트 기본 설정 (페이지 설정이 가장 먼저 와야 함)
+st.set_page_config(page_title="안드로 주식게임", layout="wide", initial_sidebar_state="expanded")
+
+# ⭐ 우주 배경 및 주식 앱 감성 커스텀 CSS 적용
+st.markdown("""
+<style>
+/* 우주 배경 (다크 톤) */
+.stApp {
+    background-color: #0b0f19;
+    background-image: 
+        radial-gradient(white, rgba(255,255,255,.2) 2px, transparent 40px),
+        radial-gradient(white, rgba(255,255,255,.15) 1px, transparent 30px),
+        radial-gradient(white, rgba(255,255,255,.1) 2px, transparent 40px);
+    background-size: 550px 550px, 350px 350px, 250px 250px;
+    background-position: 0 0, 40px 60px, 130px 270px;
+    color: #e2e8f0;
+}
+
+/* 카드 뷰(컨테이너) 디자인 - 실제 트레이딩 앱 느낌 */
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background: rgba(17, 24, 39, 0.85) !important;
+    border: 1px solid #374151 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* 제목 및 텍스트 색상 조정 */
+h1, h2, h3 {
+    color: #f8fafc !important;
+    font-weight: 700 !important;
+}
+
+/* 메트릭(자산, 수익률 등) 박스 디자인 */
+[data-testid="stMetricValue"] {
+    font-weight: 800 !important;
+}
+
+/* 버튼 모서리 둥글게 */
+.stButton > button {
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease-in-out;
+}
+.stButton > button:hover {
+    transform: translateY(-2px);
+}
+</style>
+""", unsafe_allow_html=True)
 
 constellations = [
     '양자리', '황소자리', '쌍둥이자리', '게자리', 
@@ -165,8 +212,12 @@ else:
     # ----------------------------------------
     elif st.session_state.user_role == "user":
         st_autorefresh(interval=3000, limit=None, key="user_refresh")
-        if st.button("🔄 화면이 멈췄다면 누르세요 (수동 동기화)", use_container_width=True):
-            st.rerun()
+        
+        # 상단 네비게이션
+        head_c1, head_c2 = st.columns([4, 1])
+        with head_c2:
+            if st.button("🔄 수동 동기화", use_container_width=True):
+                st.rerun()
 
         my_id = st.session_state.user_id
         my_data = global_state["users"][my_id]
@@ -174,7 +225,7 @@ else:
         # 총 자산 및 수익률 계산
         total_stock_value = sum(my_data["portfolio"][s] * current_prices[s] for s in all_assets)
         total_assets = my_data["cash"] + total_stock_value
-        initial_cash = 10000000 # 시드머니 1천만 원
+        initial_cash = 10000000 
         total_profit = total_assets - initial_cash
         roi_pct = (total_profit / initial_cash) * 100
 
@@ -185,136 +236,111 @@ else:
         else:
             st.title(f"📈 {current_year}년 주식시장")
             
-            # ⭐ 총자산/수익률 한국 주식 스타일(오르면 빨강, 내리면 초록) 적용
-            m1, m2, m3 = st.columns(3)
-            m1.metric("내 총 자산", f"{total_assets:,}원", delta=f"{total_profit:,}원", delta_color="inverse")
-            m2.metric("보유 현금", f"{my_data['cash']:,}원")
-            m3.metric("누적 수익률", f"{roi_pct:+.2f}%", delta=f"{roi_pct:+.2f}%p", delta_color="inverse")
+            # 내 자산 요약
+            with st.container(border=True):
+                m1, m2, m3 = st.columns(3)
+                m1.metric("내 총 자산", f"{total_assets:,}원", delta=f"{total_profit:,}원", delta_color="inverse")
+                m2.metric("보유 현금", f"{my_data['cash']:,}원")
+                m3.metric("누적 수익률", f"{roi_pct:+.2f}%", delta=f"{roi_pct:+.2f}%p", delta_color="inverse")
             
             st.divider()
 
-            # ⭐ 코인 거래 (퍼센트 추가 & 한국 주식 스타일 적용)
-            with st.container(border=True):
-                coin_diff = current_prices[special_coin] - prev_prices[special_coin]
-                coin_pct = (coin_diff / prev_prices[special_coin] * 100) if prev_prices[special_coin] != 0 else 0
+            # 거래 입력창용 공통 함수 (50%, MAX 로직 포함)
+            def render_trading_ui(asset_name, current_price, owned_qty):
+                # 자산별 고유 key
+                b_key = f"buy_amt_{asset_name}"
+                s_key = f"sell_amt_{asset_name}"
                 
-                st.metric(
-                    label="🪙 안드로 코인", 
-                    value=f"{current_prices[special_coin]:,}원", 
-                    delta=f"{coin_diff:,}원 ({coin_pct:+.2f}%)", 
-                    delta_color="inverse"
-                )
+                max_buyable = my_data["cash"] // current_price
+                max_sellable = owned_qty
+
+                # 메트릭 표시 (상단)
+                asset_diff = current_price - prev_prices[asset_name]
+                asset_pct = (asset_diff / prev_prices[asset_name] * 100) if prev_prices[asset_name] != 0 else 0
                 
-                owned_coin = my_data["portfolio"][special_coin]
-                st.caption(f"내 보유량: **{owned_coin}개**")
-                
-                c1, c2 = st.columns(2)
+                c1, c2 = st.columns([1, 1])
                 with c1:
-                    b_amt = st.number_input("매수 수량", min_value=0, step=1, key="b_coin")
-                    st.caption(f"예상: -{b_amt * current_prices[special_coin]:,}원")
-                    
-                    b_col1, b_col2 = st.columns(2)
-                    if b_col1.button("매수", key="btn_b_coin", use_container_width=True):
-                        if b_amt > 0 and b_amt * current_prices[special_coin] <= my_data["cash"]:
-                            global_state["users"][my_id]["cash"] -= b_amt * current_prices[special_coin]
-                            global_state["users"][my_id]["portfolio"][special_coin] += b_amt
-                            st.rerun()
-                        else:
-                            st.error("현금 부족!")
-                    
-                    if b_col2.button("MAX", key="btn_max_b_coin", type="primary", use_container_width=True):
-                        max_qty = my_data["cash"] // current_prices[special_coin]
-                        if max_qty > 0:
-                            global_state["users"][my_id]["cash"] -= max_qty * current_prices[special_coin]
-                            global_state["users"][my_id]["portfolio"][special_coin] += max_qty
-                            st.rerun()
-                        else:
-                            st.error("현금 부족!")
-
+                    st.metric(
+                        label=f"🌌 {asset_name}" if asset_name != special_coin else f"🪙 {asset_name}", 
+                        value=f"{current_price:,}원", 
+                        delta=f"{asset_diff:,}원 ({asset_pct:+.2f}%)", 
+                        delta_color="inverse"
+                    )
                 with c2:
-                    s_amt = st.number_input("매도 수량", min_value=0, step=1, key="s_coin")
-                    st.caption(f"예상: +{s_amt * current_prices[special_coin]:,}원")
-                    
-                    s_col1, s_col2 = st.columns(2)
-                    if s_col1.button("매도", key="btn_s_coin", use_container_width=True):
-                        if s_amt > 0 and s_amt <= owned_coin:
-                            global_state["users"][my_id]["cash"] += s_amt * current_prices[special_coin]
-                            global_state["users"][my_id]["portfolio"][special_coin] -= s_amt
-                            st.rerun()
-                        else:
-                            st.error("수량 부족!")
-                            
-                    if s_col2.button("MAX", key="btn_max_s_coin", type="primary", use_container_width=True):
-                        if owned_coin > 0:
-                            global_state["users"][my_id]["cash"] += owned_coin * current_prices[special_coin]
-                            global_state["users"][my_id]["portfolio"][special_coin] = 0
-                            st.rerun()
-                        else:
-                            st.error("보유량 없음!")
+                    st.markdown(f"<div style='text-align: right; padding-top: 20px; color: #9ca3af;'>보유량: <b style='color: white;'>{owned_qty}주</b></div>", unsafe_allow_html=True)
+                
+                st.markdown("<hr style='margin: 5px 0px 15px 0px; border-color: #374151;'>", unsafe_allow_html=True)
 
-            # ⭐ 12궁도 주식 거래 (퍼센트 추가 & 한국 주식 스타일 적용)
+                # 매수 / 매도 영역
+                trade_c1, trade_c2 = st.columns(2)
+                
+                # --- 매수(Buy) 구역 ---
+                with trade_c1:
+                    st.markdown(f"<span style='color: #ef4444; font-weight: bold;'>매수</span> (최대 {max_buyable:,}주)", unsafe_allow_html=True)
+                    # 수량 입력창
+                    buy_amt = st.number_input("수량", min_value=0, step=1, key=b_key, label_visibility="collapsed")
+                    
+                    btn_c1, btn_c2, btn_c3 = st.columns([1, 1, 2])
+                    if btn_c1.button("50%", key=f"b_50_{asset_name}"):
+                        st.session_state[b_key] = max_buyable // 2
+                        st.rerun()
+                    if btn_c2.button("MAX", key=f"b_max_{asset_name}"):
+                        st.session_state[b_key] = max_buyable
+                        st.rerun()
+                        
+                    if btn_c3.button("🔴 매수 실행", key=f"b_exec_{asset_name}", type="primary", use_container_width=True):
+                        if buy_amt > 0 and buy_amt * current_price <= my_data["cash"]:
+                            global_state["users"][my_id]["cash"] -= buy_amt * current_price
+                            global_state["users"][my_id]["portfolio"][asset_name] += buy_amt
+                            st.session_state[b_key] = 0 # 거래 후 수량 초기화
+                            st.rerun()
+                        elif buy_amt == 0:
+                            st.warning("수량을 입력하세요.")
+                        else:
+                            st.error("현금이 부족합니다!")
+                            
+                    st.caption(f"예상 비용: -{buy_amt * current_price:,}원")
+
+                # --- 매도(Sell) 구역 ---
+                with trade_c2:
+                    st.markdown(f"<span style='color: #3b82f6; font-weight: bold;'>매도</span> (보유 {max_sellable:,}주)", unsafe_allow_html=True)
+                    # 수량 입력창
+                    sell_amt = st.number_input("수량", min_value=0, step=1, key=s_key, label_visibility="collapsed")
+                    
+                    btn_c1, btn_c2, btn_c3 = st.columns([1, 1, 2])
+                    if btn_c1.button("50%", key=f"s_50_{asset_name}"):
+                        st.session_state[s_key] = max_sellable // 2
+                        st.rerun()
+                    if btn_c2.button("MAX", key=f"s_max_{asset_name}"):
+                        st.session_state[s_key] = max_sellable
+                        st.rerun()
+                        
+                    if btn_c3.button("🔵 매도 실행", key=f"s_exec_{asset_name}", use_container_width=True):
+                        if sell_amt > 0 and sell_amt <= max_sellable:
+                            global_state["users"][my_id]["cash"] += sell_amt * current_price
+                            global_state["users"][my_id]["portfolio"][asset_name] -= sell_amt
+                            st.session_state[s_key] = 0 # 거래 후 수량 초기화
+                            st.rerun()
+                        elif sell_amt == 0:
+                            st.warning("수량을 입력하세요.")
+                        else:
+                            st.error("보유 수량이 부족합니다!")
+                            
+                    st.caption(f"예상 수익: +{sell_amt * current_price:,}원")
+
+            # 🪙 스페셜 코인
+            st.markdown("### 💎 스페셜 마켓")
+            with st.container(border=True):
+                render_trading_ui(special_coin, current_prices[special_coin], my_data["portfolio"][special_coin])
+
+            # 🌌 12궁도 주식
             st.markdown("### 🛒 12궁도 거래소")
             display_cols = st.columns(2)
             for i, stock in enumerate(constellations):
                 with display_cols[i % 2]:
                     with st.container(border=True):
-                        stock_diff = current_prices[stock] - prev_prices[stock]
-                        stock_pct = (stock_diff / prev_prices[stock] * 100) if prev_prices[stock] != 0 else 0
-                        
-                        st.metric(
-                            label=f"🌌 {stock}", 
-                            value=f"{current_prices[stock]:,}원", 
-                            delta=f"{stock_diff:,}원 ({stock_pct:+.2f}%)", 
-                            delta_color="inverse"
-                        )
-                        
-                        owned = my_data["portfolio"][stock]
-                        st.caption(f"내 보유량: **{owned}주**")
-                        
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            b_amt = st.number_input("매수", min_value=0, step=1, key=f"b_n_{stock}")
-                            st.caption(f"예상: -{b_amt * current_prices[stock]:,}원")
-                            
-                            b_col1, b_col2 = st.columns(2)
-                            if b_col1.button("매수", key=f"b_b_{stock}", use_container_width=True):
-                                if b_amt > 0 and b_amt * current_prices[stock] <= my_data["cash"]:
-                                    global_state["users"][my_id]["cash"] -= b_amt * current_prices[stock]
-                                    global_state["users"][my_id]["portfolio"][stock] += b_amt
-                                    st.rerun()
-                                else:
-                                    st.error("현금 부족!")
-                            
-                            if b_col2.button("MAX", key=f"max_b_{stock}", type="primary", use_container_width=True):
-                                max_qty = my_data["cash"] // current_prices[stock]
-                                if max_qty > 0:
-                                    global_state["users"][my_id]["cash"] -= max_qty * current_prices[stock]
-                                    global_state["users"][my_id]["portfolio"][stock] += max_qty
-                                    st.rerun()
-                                else:
-                                    st.error("현금 부족!")
+                        render_trading_ui(stock, current_prices[stock], my_data["portfolio"][stock])
 
-                        with c2:
-                            s_amt = st.number_input("매도", min_value=0, step=1, key=f"s_n_{stock}")
-                            st.caption(f"예상: +{s_amt * current_prices[stock]:,}원")
-                            
-                            s_col1, s_col2 = st.columns(2)
-                            if s_col1.button("매도", key=f"s_b_{stock}", use_container_width=True):
-                                if s_amt > 0 and s_amt <= owned:
-                                    global_state["users"][my_id]["cash"] += s_amt * current_prices[stock]
-                                    global_state["users"][my_id]["portfolio"][stock] -= s_amt
-                                    st.rerun()
-                                else:
-                                    st.error("수량 부족!")
-                                    
-                            if s_col2.button("MAX", key=f"max_s_{stock}", type="primary", use_container_width=True):
-                                if owned > 0:
-                                    global_state["users"][my_id]["cash"] += owned * current_prices[stock]
-                                    global_state["users"][my_id]["portfolio"][stock] = 0
-                                    st.rerun()
-                                else:
-                                    st.error("보유량 없음!")
-
-    if st.sidebar.button("로그아웃"):
+    if st.sidebar.button("🚪 로그아웃", use_container_width=True):
         st.session_state.clear()
         st.rerun()
