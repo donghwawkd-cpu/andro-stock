@@ -1,8 +1,8 @@
-# 안드로 모의주식 게임 - 동시 접속 최적화 버전
+# 안드로 모의주식 게임 - 동시 접속 최적화 + 관리자 기능 완전판
 import streamlit as st
 import pandas as pd
 from streamlit_autorefresh import st_autorefresh
-import threading # ⭐ 동시성 제어를 위한 모듈
+import threading 
 
 # 1. 사이트 기본 설정
 st.set_page_config(page_title="안드로 주식게임", layout="wide", initial_sidebar_state="expanded")
@@ -56,7 +56,7 @@ def get_global_state():
         "prev_prices": init_prices.copy(),
         "users": {},
         "is_game_over": False,
-        "lock": threading.Lock() # ⭐ 동시 수정 방지용 자물쇠
+        "lock": threading.Lock() 
     }
 
 global_state = get_global_state()
@@ -72,7 +72,7 @@ if not st.session_state.logged_in:
     with col1:
         user_input = st.text_input("참가자 이름", key="user_login")
         if st.button("참가자 접속", use_container_width=True) and user_input:
-            with global_state["lock"]: # 유저 생성 시에도 락 사용
+            with global_state["lock"]: 
                 if user_input not in global_state["users"]:
                     global_state["users"][user_input] = {"cash": 10000000, "portfolio": {s: 0 for s in all_assets}}
             st.session_state.user_role, st.session_state.user_id, st.session_state.logged_in = "user", user_input, True
@@ -93,9 +93,13 @@ else:
     st.sidebar.subheader(f"📅 {turn_idx + 1} / {len(year_list)} 라운드")
     st.sidebar.markdown(f"### 현재 시대: **{current_year}년**")
 
+    # ----------------------------------------
     # [관리자 모드]
+    # ----------------------------------------
     if st.session_state.user_role == "admin":
         st.title("⚙️ 중앙 통제실")
+        
+        # 1. 참가자 자산 현황 랭킹
         user_data_list = []
         for name, data in global_state["users"].items():
             total_assets = data["cash"] + sum(data["portfolio"][s] * current_prices[s] for s in all_assets)
@@ -104,12 +108,15 @@ else:
             st.dataframe(pd.DataFrame(user_data_list).sort_values(by="총 자산", ascending=False), use_container_width=True, hide_index=True)
 
         st.divider()
+        
+        # 2. 시공간 이동 (라운드 넘기기)
+        st.markdown("### 🚀 시공간 이동 (다음 라운드)")
         if not is_game_over:
             with st.container(border=True):
                 next_year = year_list[turn_idx+1] if turn_idx < len(year_list)-1 else '종료'
                 st.write(f"**다음 목적지:** {next_year}년")
-                reserved_coin = st.number_input("다음 라운드 코인 가격 설정", value=current_prices[special_coin], step=500)
-                if st.button(f"🚀 {next_year}년으로 점프!", type="primary", use_container_width=True):
+                reserved_coin = st.number_input("💡 다음 라운드 도착 시 '안드로 코인' 설정 가격", value=current_prices[special_coin], step=500)
+                if st.button(f"🚀 {next_year}년으로 점프 실행!", type="primary", use_container_width=True):
                     with global_state["lock"]:
                         if turn_idx < len(year_list) - 1:
                             global_state["prev_prices"] = global_state["prices"].copy()
@@ -120,9 +127,41 @@ else:
                         else: global_state["is_game_over"] = True
                     st.rerun()
 
+        st.divider()
+
+        # 3. 현재 시장 강제 조작 (복구 완료!)
+        st.markdown("### 💹 현재 시장 강제 조작 (즉시 반영)")
+        st.caption("라운드를 넘기지 않고 현재 시대에서 가격만 폭락/폭등 시킬 때 사용하세요.")
+        
+        # 입력 폼에 현재 가격 동기화
+        if st.session_state.get("last_sync_year") != current_year:
+            for s in all_assets:
+                st.session_state[f"edit_{s}"] = current_prices[s]
+            st.session_state["last_sync_year"] = current_year
+
+        with st.form("admin_price_form"):
+            st.number_input("🪙 안드로 코인", step=500, key=f"edit_{special_coin}")
+            
+            cols = st.columns(4)
+            for i, stock in enumerate(constellations):
+                with cols[i % 4]:
+                    st.number_input(f"{stock}", step=100, key=f"edit_{stock}")
+            
+            submit = st.form_submit_button("✅ 설정한 가격으로 전원 즉시 반영", use_container_width=True)
+            if submit:
+                # ⭐ 관리자가 가격을 바꿀 때도 Lock을 걸어서 동시성 방어
+                with global_state["lock"]:
+                    global_state["prev_prices"] = global_state["prices"].copy()
+                    for s in all_assets:
+                        global_state["prices"][s] = st.session_state[f"edit_{s}"]
+                st.success("시장 가격이 성공적으로 업데이트되었습니다!")
+                st.rerun()
+
+    # ----------------------------------------
     # [참가자 모드]
+    # ----------------------------------------
     elif st.session_state.user_role == "user":
-        st_autorefresh(interval=5000, limit=None, key="user_refresh") # ⭐ 5초로 조정
+        st_autorefresh(interval=5000, limit=None, key="user_refresh") 
         my_id = st.session_state.user_id
         my_data = global_state["users"][my_id]
         total_assets = my_data["cash"] + sum(my_data["portfolio"][s] * current_prices[s] for s in all_assets)
@@ -147,7 +186,7 @@ else:
                 def set_val(k, v): st.session_state[k] = v
                 def do_trade(mode, k, p):
                     amt = st.session_state.get(k, 0)
-                    with global_state["lock"]: # ⭐ 거래 순간에 자물쇠 채우기
+                    with global_state["lock"]: 
                         u_data = global_state["users"][my_id]
                         if mode == "buy" and amt > 0 and amt * p <= u_data["cash"]:
                             u_data["cash"] -= amt * p
