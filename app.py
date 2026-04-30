@@ -1,4 +1,4 @@
-# 안드로 모의주식 게임 - 동시 접속 최적화 + 관리자 기능 완전판
+# 안드로 모의주식 게임 - 동시 접속 최적화 + 관리자 실시간 동기화 버전
 import streamlit as st
 import pandas as pd
 from streamlit_autorefresh import st_autorefresh
@@ -42,7 +42,7 @@ yearly_prices = {
     2026: {'양자리': 95000, '황소자리': 220000, '쌍둥이자리': 300000, '게자리': 70000, '사자자리': 250000, '처녀자리': 150000, '천칭자리': 100000, '전갈자리': 230000, '사수자리': 450000, '염소자리': 200000, '물병자리': 220000, '물고기자리': 300000}
 }
 
-# 2. 서버 공용 메모리 설정 (Lock 추가)
+# 2. 서버 공용 메모리 설정
 @st.cache_resource
 def get_global_state():
     fixed_sequence = [2024, 1997, 1999, 2025, 2026]
@@ -67,7 +67,7 @@ if 'logged_in' not in st.session_state:
 
 if not st.session_state.logged_in:
     st.title("🌌 안드로 주식게임")
-    st.info("총 4번의 시간 여행이 기다립니다! 시드머니 1,000만 원으로 시작하세요.")
+    st.info("총 4번의 시간 여행! 시드머니 1,000만 원으로 시작하세요.")
     col1, col2 = st.columns(2)
     with col1:
         user_input = st.text_input("참가자 이름", key="user_login")
@@ -97,15 +97,23 @@ else:
     # [관리자 모드]
     # ----------------------------------------
     if st.session_state.user_role == "admin":
+        # ⭐ [수정됨] 관리자 화면에도 5초마다 자동 새로고침 추가 (실시간 랭킹 반영)
+        st_autorefresh(interval=5000, limit=None, key="admin_refresh")
+        
         st.title("⚙️ 중앙 통제실")
         
         # 1. 참가자 자산 현황 랭킹
+        st.markdown("### 🏆 참가자 자산 현황 (실시간 업데이트 중)")
         user_data_list = []
         for name, data in global_state["users"].items():
             total_assets = data["cash"] + sum(data["portfolio"][s] * current_prices[s] for s in all_assets)
             user_data_list.append({"이름": name, "총 자산": total_assets, "현금": data["cash"]})
+        
         if user_data_list:
+            # ⭐ [수정됨] 랭킹 보드의 가시성을 위해 데이터프레임을 더 깔끔하게 출력
             st.dataframe(pd.DataFrame(user_data_list).sort_values(by="총 자산", ascending=False), use_container_width=True, hide_index=True)
+        else:
+            st.info("현재 접속 중인 참가자가 없습니다.")
 
         st.divider()
         
@@ -129,31 +137,22 @@ else:
 
         st.divider()
 
-        # 3. 현재 시장 강제 조작 (복구 완료!)
+        # 3. 현재 시장 강제 조작
         st.markdown("### 💹 현재 시장 강제 조작 (즉시 반영)")
-        st.caption("라운드를 넘기지 않고 현재 시대에서 가격만 폭락/폭등 시킬 때 사용하세요.")
-        
-        # 입력 폼에 현재 가격 동기화
         if st.session_state.get("last_sync_year") != current_year:
-            for s in all_assets:
-                st.session_state[f"edit_{s}"] = current_prices[s]
+            for s in all_assets: st.session_state[f"edit_{s}"] = current_prices[s]
             st.session_state["last_sync_year"] = current_year
 
         with st.form("admin_price_form"):
             st.number_input("🪙 안드로 코인", step=500, key=f"edit_{special_coin}")
-            
             cols = st.columns(4)
             for i, stock in enumerate(constellations):
-                with cols[i % 4]:
-                    st.number_input(f"{stock}", step=100, key=f"edit_{stock}")
+                with cols[i % 4]: st.number_input(f"{stock}", step=100, key=f"edit_{stock}")
             
-            submit = st.form_submit_button("✅ 설정한 가격으로 전원 즉시 반영", use_container_width=True)
-            if submit:
-                # ⭐ 관리자가 가격을 바꿀 때도 Lock을 걸어서 동시성 방어
+            if st.form_submit_button("✅ 설정한 가격으로 전원 즉시 반영", use_container_width=True):
                 with global_state["lock"]:
                     global_state["prev_prices"] = global_state["prices"].copy()
-                    for s in all_assets:
-                        global_state["prices"][s] = st.session_state[f"edit_{s}"]
+                    for s in all_assets: global_state["prices"][s] = st.session_state[f"edit_{s}"]
                 st.success("시장 가격이 성공적으로 업데이트되었습니다!")
                 st.rerun()
 
@@ -182,7 +181,6 @@ else:
                 b_key, s_key = f"b_{asset}", f"s_{asset}"
                 max_b, max_s = my_data["cash"] // price, owned
                 
-                # --- 콜백 함수 (Lock 적용) ---
                 def set_val(k, v): st.session_state[k] = v
                 def do_trade(mode, k, p):
                     amt = st.session_state.get(k, 0)
@@ -198,7 +196,6 @@ else:
                             st.session_state[k] = 0
                         else: st.toast("⚠️ 수량이나 잔액을 확인하세요!", icon="🚨")
 
-                # UI 렌더링
                 diff = price - prev_prices[asset]
                 pct = (diff / prev_prices[asset] * 100) if prev_prices[asset] != 0 else 0
                 c1, c2 = st.columns([1, 1])
