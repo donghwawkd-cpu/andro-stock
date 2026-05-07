@@ -1,4 +1,4 @@
-# 안드로 모의주식 게임 - 동시 접속 최적화 + 관리자 실시간 동기화 버전
+# 안드로 모의주식 게임 - 동시 접속 최적화 + 버그 수정 완료 버전
 import streamlit as st
 import pandas as pd
 from streamlit_autorefresh import st_autorefresh
@@ -67,7 +67,8 @@ if 'logged_in' not in st.session_state:
 
 if not st.session_state.logged_in:
     st.title("🌌 안드로 주식게임")
-    st.info("총 4번의 시간 여행! 시드머니 1,00만 원으로 시작하세요.")
+    # ⭐ 오타 수정 (1,00만 원 -> 100만 원)
+    st.info("총 4번의 시간 여행! 시드머니 100만 원으로 시작하세요.")
     col1, col2 = st.columns(2)
     with col1:
         user_input = st.text_input("참가자 이름", key="user_login")
@@ -97,20 +98,24 @@ else:
     # [관리자 모드]
     # ----------------------------------------
     if st.session_state.user_role == "admin":
-        # ⭐ [수정됨] 관리자 화면에도 5초마다 자동 새로고침 추가 (실시간 랭킹 반영)
-        st_autorefresh(interval=5000, limit=None, key="admin_refresh")
-        
+        # ⭐ 자동 새로고침 제거 (입력 튕김 방지)
         st.title("⚙️ 중앙 통제실")
         
         # 1. 참가자 자산 현황 랭킹
-        st.markdown("### 🏆 참가자 자산 현황 (실시간 업데이트 중)")
+        st.markdown("### 🏆 참가자 자산 현황")
+        
+        # 수동 새로고침 버튼 추가
+        if st.button("🔄 랭킹판 강제 새로고침 (최신화)", use_container_width=True):
+            st.rerun()
+            
         user_data_list = []
-        for name, data in global_state["users"].items():
-            total_assets = data["cash"] + sum(data["portfolio"][s] * current_prices[s] for s in all_assets)
-            user_data_list.append({"이름": name, "총 자산": total_assets, "현금": data["cash"]})
+        # ⭐ 동시성 에러(RuntimeError) 방지를 위해 lock 추가
+        with global_state["lock"]:
+            for name, data in global_state["users"].items():
+                total_assets = data["cash"] + sum(data["portfolio"][s] * current_prices[s] for s in all_assets)
+                user_data_list.append({"이름": name, "총 자산": total_assets, "현금": data["cash"]})
         
         if user_data_list:
-            # ⭐ [수정됨] 랭킹 보드의 가시성을 위해 데이터프레임을 더 깔끔하게 출력
             st.dataframe(pd.DataFrame(user_data_list).sort_values(by="총 자산", ascending=False), use_container_width=True, hide_index=True)
         else:
             st.info("현재 접속 중인 참가자가 없습니다.")
@@ -162,8 +167,12 @@ else:
     elif st.session_state.user_role == "user":
         st_autorefresh(interval=5000, limit=None, key="user_refresh") 
         my_id = st.session_state.user_id
-        my_data = global_state["users"][my_id]
-        total_assets = my_data["cash"] + sum(my_data["portfolio"][s] * current_prices[s] for s in all_assets)
+        
+        # 참가자 렌더링 시에도 안전하게 lock 사용
+        with global_state["lock"]:
+            my_data = global_state["users"][my_id]
+            total_assets = my_data["cash"] + sum(my_data["portfolio"][s] * current_prices[s] for s in all_assets)
+        
         roi = ((total_assets - 1000000) / 1000000) * 100
 
         if is_game_over:
