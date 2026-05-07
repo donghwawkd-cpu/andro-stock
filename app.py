@@ -35,17 +35,17 @@ special_coin = '안드로 코인'
 all_assets = constellations + [special_coin]
 
 yearly_prices = {
-    1997: {'양자리': 800, '황소자리': 500, '쌍둥이자리': 300, '게자리': 400, '사자자리': 1200, '처녀자리': 600, '천칭자리': 100, '전갈자리': 150, '사수자리': 200, '염소자리': 100, '물병자리': 500, '물고기자리': 200},
-    1999: {'양자리': 2500, '황소자리': 1800, '쌍둥이자리': 500, '게자리': 600, '사자자리': 1500, '처녀자리': 800, '천칭자리': 300, '전갈자리': 500, '사수자리': 400, '염소자리': 200, '물병자리': 5000, '물고기자리': 800},
-    2024: {'양자리': 75000, '황소자리': 150000, '쌍둥이자리': 180000, '게자리': 55000, '사자자리': 200000, '처녀자리': 110000, '천칭자리': 85000, '전갈자리': 180000, '사수자리': 400000, '염소자리': 150000, '물병자리': 180000, '물고기자리': 200000},
-    2025: {'양자리': 85000, '황소자리': 180000, '쌍둥이자리': 250000, '게자리': 60000, '사자자리': 220000, '처녀자리': 130000, '천칭자리': 90000, '전갈자리': 200000, '사수자리': 350000, '염소자리': 120000, '물병자리': 190000, '물고기자리': 250000},
-    2026: {'양자리': 95000, '황소자리': 220000, '쌍둥이자리': 300000, '게자리': 70000, '사자자리': 250000, '처녀자리': 150000, '천칭자리': 100000, '전갈자리': 230000, '사수자리': 450000, '염소자리': 200000, '물병자리': 220000, '물고기자리': 300000}
+    1985: {'양자리': 1500, '황소자리': 2000, '쌍둥이자리': 1000, '게자리': 1000, '사자자리': 1500, '처녀자리': 1000, '천칭자리': 1000, '전갈자리': 1000, '사수자리': 1000, '염소자리': 1000, '물병자리': 1000, '물고기자리': 1000},
+    1998: {'양자리': 3000, '황소자리': 1500, '쌍둥이자리': 1500, '게자리': 20000, '사자자리': 500, '처녀자리': 2500, '천칭자리': 1000, '전갈자리': 1000, '사수자리': 1000, '염소자리': 1000, '물병자리': 1000, '물고기자리': 1000},
+    2008: {'양자리': 15000, '황소자리': 40000, '쌍둥이자리': 15000, '게자리': 25000, '사자자리': 8000, '처녀자리': 5000, '천칭자리': 30000, '전갈자리': 1000, '사수자리': 15000, '염소자리': 15000, '물병자리': 5000, '물고기자리': 15000},
+    2018: {'양자리': 45000, '황소자리': 120000, '쌍둥이자리': 55000, '게자리': 110000, '사자자리': 70000, '처녀자리': 90000, '천칭자리': 130000, '전갈자리': 25000, '사수자리': 60000, '염소자리': 25000, '물병자리': 15000, '물고기자리': 200000},
+    2026: {'양자리': 235000, '황소자리': 250000, '쌍둥이자리': 350000, '게자리': 550000, '사자자리': 1600000, '처녀자리': 250000, '천칭자리': 190000, '전갈자리': 280000, '사수자리': 210000, '염소자리': 55000, '물병자리': 265000, '물고기자리': 180000}
 }
 
 # 2. 서버 공용 메모리 설정
 @st.cache_resource
 def get_global_state():
-    fixed_sequence = [2024, 1997, 1999, 2025, 2026]
+    fixed_sequence = [1985, 1998, 2008, 2018, 2026]
     first_year = fixed_sequence[0]
     init_prices = yearly_prices[first_year].copy()
     init_prices[special_coin] = 1000 
@@ -67,14 +67,14 @@ if 'logged_in' not in st.session_state:
 
 if not st.session_state.logged_in:
     st.title("🌌 안드로 주식게임")
-    st.info("총 4번의 시간 여행! 시드머니 1,000만 원으로 시작하세요.")
+    st.info("총 4번의 시간 여행! 시드머니 1,00만 원으로 시작하세요.")
     col1, col2 = st.columns(2)
     with col1:
         user_input = st.text_input("참가자 이름", key="user_login")
         if st.button("참가자 접속", use_container_width=True) and user_input:
             with global_state["lock"]: 
                 if user_input not in global_state["users"]:
-                    global_state["users"][user_input] = {"cash": 10000000, "portfolio": {s: 0 for s in all_assets}}
+                    global_state["users"][user_input] = {"cash": 1000000, "portfolio": {s: 0 for s in all_assets}}
             st.session_state.user_role, st.session_state.user_id, st.session_state.logged_in = "user", user_input, True
             st.rerun()
     with col2:
@@ -164,7 +164,7 @@ else:
         my_id = st.session_state.user_id
         my_data = global_state["users"][my_id]
         total_assets = my_data["cash"] + sum(my_data["portfolio"][s] * current_prices[s] for s in all_assets)
-        roi = ((total_assets - 10000000) / 10000000) * 100
+        roi = ((total_assets - 1000000) / 1000000) * 100
 
         if is_game_over:
             st.title("🏁 게임 종료!"); st.header(f"🎊 최종 자산: {total_assets:,}원"); st.balloons()
@@ -172,7 +172,7 @@ else:
             st.title(f"📈 {current_year}년 주식시장")
             with st.container(border=True):
                 m1, m2, m3 = st.columns(3)
-                m1.metric("내 총 자산", f"{total_assets:,}원", delta=f"{total_assets-10000000:,}원", delta_color="inverse")
+                m1.metric("내 총 자산", f"{total_assets:,}원", delta=f"{total_assets-1000000:,}원", delta_color="inverse")
                 m2.metric("보유 현금", f"{my_data['cash']:,}원")
                 m3.metric("누적 수익률", f"{roi:+.2f}%", delta=f"{roi:+.2f}%p", delta_color="inverse")
             st.divider()
